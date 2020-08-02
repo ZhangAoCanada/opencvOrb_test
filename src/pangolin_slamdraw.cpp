@@ -32,13 +32,12 @@ namespace morb
             // glClearColor(1.0, 1.0, 1.0, 1.0);
             d_cam.Activate(s_cam);
 
+            // set the hormogenours as indentity for matmul
+            draw_mat.SetIdentity();
+
             // Drawing things
-            hm_frames = R_vec.size();
-            R = R_vec[hm_frames - 1];
-            T = T_vec[hm_frames - 1];
-            transferToPangoMat(R, T);
             drawPoints(all_points, all_colors);
-            drawCameraPositions(R_vec, T_vec);
+            drawPath(R_vec, T_vec);
 
             // Swap frames and Process Events
             pangolin::FinishFrame();
@@ -59,11 +58,30 @@ namespace morb
         glEnd();
     }
 
-    void MorbDraw::drawCam(Mat H)
+    void MorbDraw::drawPath(vector<Mat> R_vec, vector<Mat> T_vec)
     {
+        for (int i=0; i<R_vec.size(); i++)
+        {
+            R = R_vec[i];
+            T = T_vec[i];
+            getHormoMat(R, T);
+
+            drawCam();
+            if (i == 0){
+                prev_T = T;
+            } else {
+                drawLine(T);
+                prev_T = T;
+            }
+        }
+    }
+
+    void MorbDraw::drawCam()
+    {
+        Mat H_transpose = H.t();
 
         glPushMatrix();
-        glMultMatrixf(H.ptr<GLfloat>(0));
+        glMultMatrixf(H_transpose.ptr<GLfloat>(0));
 
         glLineWidth(2);
         glColor3f(0.0f,1.0f,0.0f);
@@ -93,6 +111,40 @@ namespace morb
         glEnd();
 
         glPopMatrix();
+    }
+
+    void MorbDraw::drawLine(Mat T)
+    {
+        glLineWidth(2);
+        glColor4f(0.0f, 1.0f, 0.0f, 0.6f); 
+
+        glBegin(GL_LINES);
+        glVertex3f(prev_T.at<float>(0), prev_T.at<float>(1), prev_T.at<float>(2));
+        glVertex3f(T.at<float>(0), T.at<float>(1), T.at<float>(2));
+        glEnd();
+    }
+
+    void MorbDraw::getHormoMat(Mat R, Mat T)
+    {
+        H.at<float>(0,0) = R.at<float>(0,0);
+        H.at<float>(0,1) = R.at<float>(0,1);
+        H.at<float>(0,2) = R.at<float>(0,2);
+        H.at<float>(0,3) = T.at<float>(0);
+
+        H.at<float>(1,0) = R.at<float>(1,0);
+        H.at<float>(1,1) = R.at<float>(1,1);
+        H.at<float>(1,2) = R.at<float>(1,2);
+        H.at<float>(1,3) = T.at<float>(1);
+
+        H.at<float>(2,0) = R.at<float>(2,0);
+        H.at<float>(2,1) = R.at<float>(2,1);
+        H.at<float>(2,2) = R.at<float>(2,2);
+        H.at<float>(2,3) = T.at<float>(2);
+
+        H.at<float>(3,0) = 0;
+        H.at<float>(3,1) = 0;
+        H.at<float>(3,2) = 0;
+        H.at<float>(3,3) = 1;
     }
 
     void MorbDraw::transferToPangoMat(Mat R, Mat T)
