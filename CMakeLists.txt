@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0)
-project(mono_orb)
+project(morb)
 
 # Library OpenCV
 find_package(OpenCV REQUIRED)
@@ -23,5 +23,6 @@ file(GLOB mono_files
 	"src/*.cpp"
 )
 
-add_executable(mono_slam ${mono_files})
-target_link_libraries(mono_slam ${OpenCV_LIBS} ${Pangolin_LIBRARIES} Eigen3::Eigen)
+# add_executable(morb ${mono_files})
+add_executable(morb src/draw_test.cpp ${mono_files})
+target_link_libraries(morb ${OpenCV_LIBS} ${Pangolin_LIBRARIES} Eigen3::Eigen)
