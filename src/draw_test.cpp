@@ -88,7 +88,25 @@ using namespace cv;
 
 int main()
 {
+    string video_path = "/mnt/f/test_data/seq.mov";
+    VideoCapture video(video_path.c_str());
+    Mat current_frame;
+    Size size;
     morb::MorbCV morb_slam;
-    cout << "Hello world" << endl;
+
+    if (!video.isOpened()){
+        cerr << "Please input the right video path" << endl;
+    }
+
+    while(1) {
+        video >> current_frame;
+
+        if (current_frame.empty())
+            break;
+
+        morb_slam(current_frame);
+
+    }
+
     return 0;
 }
