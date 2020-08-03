@@ -1,11 +1,19 @@
 #include "mono_orb_slam.h"
 
+string CAMINTRIN = "../intrinsic.txt";
+
 namespace morb
 {
 
-MorbCV::MorbCV()
+MorbCV::MorbCV():camintrinsic_filename(CAMINTRIN)
 {
     namedWindow("img", WINDOW_NORMAL); 
+    readCameraIntrinsic();
+    cout << "intrinsic: " << camera_matrix << endl;
+    R_world = Mat::eye(3, 3, CV_64FC1);
+    t_world = Mat::eye(3, 1, CV_64FC1); 
+    R_all.push_back(R_world);
+    t_all.push_back(t_world);
 }
 
 void MorbCV::operator() (Mat img)
@@ -14,8 +22,7 @@ void MorbCV::operator() (Mat img)
         prev_img = img.clone();
     } else {
         orbKeyPointMatch(prev_img, img);
-        imgPlot(img_out);
-        prev_img = img.clone();
+        imgPlot(prev_img);
     }
 }
 
@@ -27,16 +34,175 @@ void MorbCV::imgPlot(Mat img)
 
 void MorbCV::orbKeyPointMatch(Mat img1, Mat img2)
 {
+    vector<KeyPoint> kp1, kp2;
+    vector<Point2f> kp1_pnts, kp2_pnts;
+    vector<Point2f> kp_prev, kp_current;
+    vector<Point3f> pnts_colors;
+    Mat descriptor1, descriptor2, mask;
+
     orb_cv->detect(img1, kp1);
     orb_cv->compute(img1, kp1, descriptor1);
 
     orb_cv->detect(img2, kp2);
     orb_cv->compute(img1, kp2, descriptor2);
 
-    matcher.match(descriptor1, descriptor2, matches);
-    drawMatches(img1, kp1, img2, kp2, matches, img_out);
+    KeyPoint::convert(kp1, kp1_pnts, std::vector<int>());
+    KeyPoint::convert(kp2, kp2_pnts, std::vector<int>());
 
+    vector<vector<DMatch>> matches;
+    matcher.knnMatch(descriptor1, descriptor2, matches, 2);
+    // drawMatches(img1, kp1, img2, kp2, matches, img_out);
     // drawKeypoints(img1, kp, img_out, Scalar(0, 255, 0));
+
+    if (matches.size() > 0)
+    {
+        for (int i=0; i<matches.size(); i++)
+        {
+            if (matches[i][0].distance < 0.75*matches[i][1].distance)
+            {
+                if (matches[i][0].distance < 150)
+                {
+                    Point2f p1_tmp = kp1_pnts[matches[i][0].queryIdx];
+                    Point2f p2_tmp = kp2_pnts[matches[i][0].trainIdx];
+                    Point pnt_1 = Point((int)p1_tmp.x, (int)p1_tmp.y);
+                    Point pnt_2 = Point((int)p2_tmp.x, (int)p2_tmp.y);
+                    Point3f color_tmp;
+
+                    color_tmp.x = (float)img1.at<Vec3b>(pnt_1.x, pnt_1.y)[0] / 255;
+                    color_tmp.y = (float)img1.at<Vec3b>(pnt_1.x, pnt_1.y)[1] / 255;
+                    color_tmp.z = (float)img1.at<Vec3b>(pnt_1.x, pnt_1.y)[2] / 255;
+
+                    kp_prev.push_back(p1_tmp);
+                    kp_current.push_back(p2_tmp);
+                    pnts_colors.push_back(color_tmp);
+
+                    // circle(img2, pnt_1, 3, Scalar(255, 0, 0), -1);
+                    // circle(img2, pnt_2, 3, Scalar(0, 255, 0), -1);
+                    // line(img2, pnt_1, pnt_2, Scalar(255, 0, 0));
+                }
+            }
+        }
+    }
+
+    if (kp_prev.size() > 5)
+    {
+        E = findEssentialMat(kp_prev, kp_current, camera_matrix, 
+                                cv::RANSAC, 0.999, 1.0, mask);
+        recoverPose(E, kp_prev, kp_current, camera_matrix, R, t, mask);
+
+        RMatToMaxAngles(R);
+        TToMaxDistance(t);
+
+        if (max_angle <= MAX_ANGLE && max_translate <= MAX_TRANSLATE)
+        {
+            getPointCloud(kp_prev, kp_current, pnts_colors);
+            getPosition();
+            prev_img = img2.clone();
+        }
+    } 
+}
+
+void MorbCV::getPointCloud(vector<Point2f> kp1, vector<Point2f> kp2, vector<Point3f> colors)
+{
+    Mat P1, P2, transformed_pnts;
+    Mat pnts3D(1, kp1.size(), CV_64FC1);
+
+    hconcat(R, t, P2);
+    hconcat(Mat::eye(3,3,CV_64FC1), Mat::ones(3,1,CV_64FC1), P1);
+    triangulatePoints(P1, P2, kp1, kp2, pnts3D);
+
+    for (int i=0; i<pnts3D.cols; i++)
+    {
+        pnts3D.at<double>(0, i) = pnts3D.at<double>(0, i) / pnts3D.at<double>(3, i);
+        pnts3D.at<double>(1, i) = pnts3D.at<double>(1, i) / pnts3D.at<double>(3, i);
+        pnts3D.at<double>(2, i) = pnts3D.at<double>(2, i) / pnts3D.at<double>(3, i);
+    }
+    // convert [x, y, z, w] to [x, y, z]
+    pnts3D.rowRange(0, 3).convertTo(pnts3D, CV_64FC1);
+    // don't know why, but it works.
+    flip(pnts3D, pnts3D, 0);
+    transformed_pnts = MONO_SCALE * (R_world * pnts3D);
+    for (int i=0; i<transformed_pnts.cols; i++)
+    {
+        Point3f this_point;
+        this_point.x = transformed_pnts.at<double>(0, i);
+        this_point.y = transformed_pnts.at<double>(1, i);
+        this_point.z = transformed_pnts.at<double>(2, i);
+        // remove too far and too close points
+        if (sqrt(pow(this_point.x, 2) + pow(this_point.z, 2)) <= PCL_DISTANCE_UPPER &&
+            sqrt(pow(this_point.x, 2) + pow(this_point.z, 2)) >= PCL_DISTANCE_LOWER &&
+            this_point.z > 0)
+        {
+            pcl_all.push_back(this_point);
+            pcl_colors.push_back(colors[i]);
+        }
+    }
+}
+
+void MorbCV::getPosition()
+{
+    t_world = t_world + MONO_SCALE * (R_world * t);
+    R_world = R * R_world;
+    R_all.push_back(R_world);
+    t_all.push_back(t_world);
+}
+
+void MorbCV::readCameraIntrinsic()
+{
+    ifstream f;
+    f.open(camintrinsic_filename.c_str());
+    char value_str[100];
+    vector<float> values;
+    camera_matrix = cv::Mat::zeros(cv::Size(3,3), CV_32F);
+    
+    /* read camera matrix values */
+    if (f.is_open()){
+        while (!f.eof()){
+            f >> value_str;
+            values.push_back(std::stod(value_str));
+        }
+    }
+
+    /* assign camear matrix values */
+    for (int i=0; i<3; i++){
+        for (int j=0; j<3; j++){
+            camera_matrix.at<float>(i,j) = values[i*3 + j];
+        }
+    }
+}
+
+void MorbCV::RMatToMaxAngles(Mat R)
+{    
+    float sy = sqrt(R.at<double>(0,0) * R.at<double>(0,0) +  R.at<double>(1,0) * R.at<double>(1,0) );
+
+    bool singular = sy < 1e-6; // If
+
+    double x, y, z;
+    if (!singular)
+    {
+        x = atan2(R.at<double>(2,1) , R.at<double>(2,2));
+        y = atan2(-R.at<double>(2,0), sy);
+        z = atan2(R.at<double>(1,0), R.at<double>(0,0));
+    }
+    else
+    {
+        x = atan2(-R.at<double>(1,2), R.at<double>(1,1));
+        y = atan2(-R.at<double>(2,0), sy);
+        z = 0;
+    }
+
+    max_angle = max(abs(z), max(abs(x), abs(y)));
+}
+
+void MorbCV::TToMaxDistance(Mat T)
+{
+    double x, y, z;
+
+    x = T.at<double>(0);
+    y = T.at<double>(1);
+    z = T.at<double>(2);
+
+    max_translate = max(abs(x), max(abs(y),abs(z)));
 }
 
 }

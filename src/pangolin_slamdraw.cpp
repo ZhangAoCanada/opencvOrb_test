@@ -3,13 +3,23 @@
 using namespace std;
 using namespace cv;
 
-
 namespace morb
 {
 			
-    void MorbDraw::operator() (vector<Point3f> all_points, vector<Point3f> all_colors, 
-                            vector<Mat> R_vec, vector<Mat> T_vec)
+    void MorbDraw::operator() ()
+    // (vector<Point3f> all_points, vector<Point3f> all_colors, 
+    //                         vector<Mat> R_vec, vector<Mat> T_vec)
     {
+        string video_path = "/mnt/f/test_data/seq2.mov";
+        VideoCapture video(video_path.c_str());
+        Mat current_frame;
+        Size size;
+        MorbCV morb_slam;
+
+        if (!video.isOpened()){
+            cerr << "Please input the right video path" << endl;
+        }
+
         pangolin::CreateWindowAndBind("Main",640,480);
         glEnable(GL_DEPTH_TEST);
 
@@ -27,6 +37,14 @@ namespace morb
 
         while( !pangolin::ShouldQuit() )
         {
+            video >> current_frame;
+
+            if (current_frame.empty())
+                break;
+
+            resize(current_frame, current_frame, Size(), 0.5, 0.5);
+            morb_slam(current_frame);
+
             // Clear screen and activate view to render into
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             // glClearColor(1.0, 1.0, 1.0, 1.0);
@@ -36,8 +54,11 @@ namespace morb
             draw_mat.SetIdentity();
 
             // Drawing things
-            drawPoints(all_points, all_colors);
-            drawPath(R_vec, T_vec);
+            if (morb_slam.pcl_all.size() > 0)
+            {
+                drawPoints(morb_slam.pcl_all, morb_slam.pcl_colors);
+                // drawPath(morb_slam.R_all, morb_slam.t_all);
+            }
 
             // Swap frames and Process Events
             pangolin::FinishFrame();

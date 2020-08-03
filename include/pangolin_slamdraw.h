@@ -1,21 +1,27 @@
+#ifndef PANGOLIN_SLAMDRAW_H
+#define PANGOLIN_SLAMDRAW_H
+
 #include <pangolin/pangolin.h>
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include <vector>
 #include <Eigen/Dense>
+#include "mono_orb_slam.h"
 
 using namespace std;
 using namespace cv;
 
 namespace morb
 {
+class MorbCV;
 
 class MorbDraw
 {
 public:
     MorbDraw() {};
-    void operator()(vector<Point3f> all_points, vector<Point3f> all_colors, 
-                    vector<Mat> R_vec, vector<Mat> T_vec);
+    void operator()();
+    // void operator()(vector<Point3f> all_points, vector<Point3f> all_colors, 
+    //                 vector<Mat> R_vec, vector<Mat> T_vec);
     void drawPoints(vector<Point3f> all_points, vector<Point3f> all_colors);
     void drawPath(vector<Mat> R_vec, vector<Mat> T_vec);
     void drawCam();
@@ -40,4 +46,4 @@ protected:
 
 }
 
-
+#endif
