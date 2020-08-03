@@ -28,8 +28,8 @@ public:
     void transferToPangoMat(Mat R, Mat T);
 
 protected:
-    // string video_path = "/mnt/f/test_data/kitti_seq0.avi";
-    string video_path = "/mnt/f/test_data/seq.mov";
+    string video_path = "/mnt/f/test_data/kitti_seq0.avi";
+    // string video_path = "/mnt/f/test_data/seq.mov";
     pangolin::OpenGlMatrix draw_mat;
     int hm_frames;
     Mat R;

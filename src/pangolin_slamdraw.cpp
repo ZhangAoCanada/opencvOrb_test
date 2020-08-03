@@ -37,32 +37,32 @@ namespace morb
         {
             video >> current_frame;
 
-            if (current_frame.empty())
-                break;
-
-            if (count % 2 == 0)
+            if (!current_frame.empty())
             {
-                morb_slam(current_frame);
-                // Clear screen and activate view to render into
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-                // glClearColor(1.0, 1.0, 1.0, 1.0);
-                d_cam.Activate(s_cam);
-
-                // set the hormogenours as indentity for matmul
-                draw_mat.SetIdentity();
-
-                // Drawing things
-                if (morb_slam.pcl_all.size() > 0)
+                if (count % 2 == 0)
                 {
-                    drawPoints(morb_slam.pcl_all, morb_slam.pcl_colors);
-                    drawPath(morb_slam.R_all, morb_slam.t_all);
+                    morb_slam(current_frame);
                 }
-
-                // Swap frames and Process Events
-                pangolin::FinishFrame();
+                count ++;
             }
-            count ++;
 
+            // Clear screen and activate view to render into
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            // glClearColor(1.0, 1.0, 1.0, 1.0);
+            d_cam.Activate(s_cam);
+
+            // set the hormogenours as indentity for matmul
+            draw_mat.SetIdentity();
+
+            // Drawing things
+            if (morb_slam.pcl_all.size() > 0)
+            {
+                drawPoints(morb_slam.pcl_all, morb_slam.pcl_colors);
+                drawPath(morb_slam.R_all, morb_slam.t_all);
+            }
+
+            // Swap frames and Process Events
+            pangolin::FinishFrame();
         }
     }
 
