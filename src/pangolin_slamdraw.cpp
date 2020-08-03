@@ -7,14 +7,12 @@ namespace morb
 {
 			
     void MorbDraw::operator() ()
-    // (vector<Point3f> all_points, vector<Point3f> all_colors, 
-    //                         vector<Mat> R_vec, vector<Mat> T_vec)
     {
-        string video_path = "/mnt/f/test_data/seq2.mov";
         VideoCapture video(video_path.c_str());
         Mat current_frame;
         Size size;
         MorbCV morb_slam;
+        int count = 0;
 
         if (!video.isOpened()){
             cerr << "Please input the right video path" << endl;
@@ -42,26 +40,29 @@ namespace morb
             if (current_frame.empty())
                 break;
 
-            resize(current_frame, current_frame, Size(), 0.5, 0.5);
-            morb_slam(current_frame);
-
-            // Clear screen and activate view to render into
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            // glClearColor(1.0, 1.0, 1.0, 1.0);
-            d_cam.Activate(s_cam);
-
-            // set the hormogenours as indentity for matmul
-            draw_mat.SetIdentity();
-
-            // Drawing things
-            if (morb_slam.pcl_all.size() > 0)
+            if (count % 2 == 0)
             {
-                drawPoints(morb_slam.pcl_all, morb_slam.pcl_colors);
-                // drawPath(morb_slam.R_all, morb_slam.t_all);
-            }
+                morb_slam(current_frame);
+                // Clear screen and activate view to render into
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                // glClearColor(1.0, 1.0, 1.0, 1.0);
+                d_cam.Activate(s_cam);
 
-            // Swap frames and Process Events
-            pangolin::FinishFrame();
+                // set the hormogenours as indentity for matmul
+                draw_mat.SetIdentity();
+
+                // Drawing things
+                if (morb_slam.pcl_all.size() > 0)
+                {
+                    drawPoints(morb_slam.pcl_all, morb_slam.pcl_colors);
+                    drawPath(morb_slam.R_all, morb_slam.t_all);
+                }
+
+                // Swap frames and Process Events
+                pangolin::FinishFrame();
+            }
+            count ++;
+
         }
     }
 
@@ -89,10 +90,10 @@ namespace morb
 
             drawCam();
             if (i == 0){
-                prev_T = T;
+                prev_T = T.clone();
             } else {
                 drawLine(T);
-                prev_T = T;
+                prev_T = T.clone();
             }
         }
     }
@@ -100,6 +101,7 @@ namespace morb
     void MorbDraw::drawCam()
     {
         Mat H_transpose = H.t();
+        // Mat H_transpose = H.clone();
 
         glPushMatrix();
         glMultMatrixf(H_transpose.ptr<GLfloat>(0));
@@ -140,56 +142,56 @@ namespace morb
         glColor4f(0.0f, 1.0f, 0.0f, 0.6f); 
 
         glBegin(GL_LINES);
-        glVertex3f(prev_T.at<float>(0), prev_T.at<float>(1), prev_T.at<float>(2));
-        glVertex3f(T.at<float>(0), T.at<float>(1), T.at<float>(2));
+        glVertex3f((float)prev_T.at<double>(0), (float)prev_T.at<double>(1), (float)prev_T.at<double>(2));
+        glVertex3f((float)T.at<double>(0), (float)T.at<double>(1), (float)T.at<double>(2));
         glEnd();
     }
 
     void MorbDraw::getHormoMat(Mat R, Mat T)
     {
-        H.at<float>(0,0) = R.at<float>(0,0);
-        H.at<float>(0,1) = R.at<float>(0,1);
-        H.at<float>(0,2) = R.at<float>(0,2);
-        H.at<float>(0,3) = T.at<float>(0);
+        H.at<float>(0,0) = (float)R.at<double>(0,0);
+        H.at<float>(0,1) = (float)R.at<double>(0,1);
+        H.at<float>(0,2) = (float)R.at<double>(0,2);
+        H.at<float>(0,3) = (float)T.at<double>(0);
 
-        H.at<float>(1,0) = R.at<float>(1,0);
-        H.at<float>(1,1) = R.at<float>(1,1);
-        H.at<float>(1,2) = R.at<float>(1,2);
-        H.at<float>(1,3) = T.at<float>(1);
+        H.at<float>(1,0) = (float)R.at<double>(1,0);
+        H.at<float>(1,1) = (float)R.at<double>(1,1);
+        H.at<float>(1,2) = (float)R.at<double>(1,2);
+        H.at<float>(1,3) = (float)T.at<double>(1);
 
-        H.at<float>(2,0) = R.at<float>(2,0);
-        H.at<float>(2,1) = R.at<float>(2,1);
-        H.at<float>(2,2) = R.at<float>(2,2);
-        H.at<float>(2,3) = T.at<float>(2);
+        H.at<float>(2,0) = (float)R.at<double>(2,0);
+        H.at<float>(2,1) = (float)R.at<double>(2,1);
+        H.at<float>(2,2) = (float)R.at<double>(2,2);
+        H.at<float>(2,3) = (float)T.at<double>(2);
 
-        H.at<float>(3,0) = 0;
-        H.at<float>(3,1) = 0;
-        H.at<float>(3,2) = 0;
-        H.at<float>(3,3) = 1;
+        H.at<float>(3,0) = (float)0;
+        H.at<float>(3,1) = (float)0;
+        H.at<float>(3,2) = (float)0;
+        H.at<float>(3,3) = (float)1;
     }
 
     void MorbDraw::transferToPangoMat(Mat R, Mat T)
     {
         if (!R.empty() && !T.empty())
         {
-            draw_mat.m[0] = R.at<float>(0,0);
-            draw_mat.m[1] = R.at<float>(1,0);
-            draw_mat.m[2] = R.at<float>(2,0);
+            draw_mat.m[0] = R.at<double>(0,0);
+            draw_mat.m[1] = R.at<double>(1,0);
+            draw_mat.m[2] = R.at<double>(2,0);
             draw_mat.m[3] = 0.0;
 
-            draw_mat.m[4] = R.at<float>(0,1);
-            draw_mat.m[5] = R.at<float>(1,1);
-            draw_mat.m[6] = R.at<float>(2,1);
+            draw_mat.m[4] = R.at<double>(0,1);
+            draw_mat.m[5] = R.at<double>(1,1);
+            draw_mat.m[6] = R.at<double>(2,1);
             draw_mat.m[7] = 0.0;
 
-            draw_mat.m[8] = R.at<float>(0,2);
-            draw_mat.m[9] = R.at<float>(1,2);
-            draw_mat.m[10] = R.at<float>(2,2);
+            draw_mat.m[8] = R.at<double>(0,2);
+            draw_mat.m[9] = R.at<double>(1,2);
+            draw_mat.m[10] = R.at<double>(2,2);
             draw_mat.m[11] = 0.0;
 
-            draw_mat.m[12] = T.at<float>(0);
-            draw_mat.m[13] = T.at<float>(1);
-            draw_mat.m[14] = T.at<float>(2);
+            draw_mat.m[12] = T.at<double>(0);
+            draw_mat.m[13] = T.at<double>(1);
+            draw_mat.m[14] = T.at<double>(2);
             draw_mat.m[15] = 1.0;
         } else {
             draw_mat.SetIdentity();

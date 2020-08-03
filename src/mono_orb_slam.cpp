@@ -11,18 +11,24 @@ MorbCV::MorbCV():camintrinsic_filename(CAMINTRIN)
     readCameraIntrinsic();
     cout << "intrinsic: " << camera_matrix << endl;
     R_world = Mat::eye(3, 3, CV_64FC1);
-    t_world = Mat::eye(3, 1, CV_64FC1); 
-    R_all.push_back(R_world);
-    t_all.push_back(t_world);
+    t_world = Mat::zeros(3, 1, CV_64FC1); 
+    this_R = R_world.clone();
+    this_T = t_world.clone();
+    R_all.push_back(this_R);
+    t_all.push_back(this_T);
 }
 
 void MorbCV::operator() (Mat img)
 {
+    resize(img, img, Size(), IMAGE_SCALEFACTOR, IMAGE_SCALEFACTOR);
+    img_out = img.clone();
+
     if (prev_img.empty()){
         prev_img = img.clone();
     } else {
         orbKeyPointMatch(prev_img, img);
-        imgPlot(prev_img);
+        imgPlot(img_out);
+        prev_img = img.clone();
     }
 }
 
@@ -34,25 +40,32 @@ void MorbCV::imgPlot(Mat img)
 
 void MorbCV::orbKeyPointMatch(Mat img1, Mat img2)
 {
+    Mat img1_gray, img2_gray;
     vector<KeyPoint> kp1, kp2;
     vector<Point2f> kp1_pnts, kp2_pnts;
     vector<Point2f> kp_prev, kp_current;
+    vector<Point2f> corners_1, corners_2;
     vector<Point3f> pnts_colors;
     Mat descriptor1, descriptor2, mask;
 
-    orb_cv->detect(img1, kp1);
+    cvtColor(img1, img1_gray, COLOR_BGR2GRAY);
+    goodFeaturesToTrack(img1_gray, corners_1, NUM_CORNERS_TO_DETECT, 0.01, 7.0);
+    KeyPoint::convert(corners_1, kp1);
     orb_cv->compute(img1, kp1, descriptor1);
 
-    orb_cv->detect(img2, kp2);
-    orb_cv->compute(img1, kp2, descriptor2);
+    cvtColor(img2, img2_gray, COLOR_BGR2GRAY);
+    goodFeaturesToTrack(img2_gray, corners_2, NUM_CORNERS_TO_DETECT, 0.01, 7.0);
+    KeyPoint::convert(corners_2, kp2);
+    orb_cv->compute(img2, kp2, descriptor2);
 
     KeyPoint::convert(kp1, kp1_pnts, std::vector<int>());
     KeyPoint::convert(kp2, kp2_pnts, std::vector<int>());
 
     vector<vector<DMatch>> matches;
     matcher.knnMatch(descriptor1, descriptor2, matches, 2);
+
     // drawMatches(img1, kp1, img2, kp2, matches, img_out);
-    // drawKeypoints(img1, kp, img_out, Scalar(0, 255, 0));
+    // drawKeypoints(img1, kp1, img_out, Scalar(0, 255, 0));
 
     if (matches.size() > 0)
     {
@@ -60,40 +73,45 @@ void MorbCV::orbKeyPointMatch(Mat img1, Mat img2)
         {
             if (matches[i][0].distance < 0.75*matches[i][1].distance)
             {
-                if (matches[i][0].distance < 150)
+                if (matches[i][0].distance < KNN_MATCHER_DISTANCE_THRESHOLD)
                 {
                     Point2f p1_tmp = kp1_pnts[matches[i][0].queryIdx];
                     Point2f p2_tmp = kp2_pnts[matches[i][0].trainIdx];
                     Point pnt_1 = Point((int)p1_tmp.x, (int)p1_tmp.y);
                     Point pnt_2 = Point((int)p2_tmp.x, (int)p2_tmp.y);
-                    Point3f color_tmp;
 
-                    color_tmp.x = (float)img1.at<Vec3b>(pnt_1.x, pnt_1.y)[0] / 255;
-                    color_tmp.y = (float)img1.at<Vec3b>(pnt_1.x, pnt_1.y)[1] / 255;
-                    color_tmp.z = (float)img1.at<Vec3b>(pnt_1.x, pnt_1.y)[2] / 255;
+                    Point3f color_tmp(1.0, 1.0, 1.0);
 
                     kp_prev.push_back(p1_tmp);
                     kp_current.push_back(p2_tmp);
                     pnts_colors.push_back(color_tmp);
 
-                    // circle(img2, pnt_1, 3, Scalar(255, 0, 0), -1);
-                    // circle(img2, pnt_2, 3, Scalar(0, 255, 0), -1);
-                    // line(img2, pnt_1, pnt_2, Scalar(255, 0, 0));
+                    circle(img_out, pnt_1, 3, Scalar(255, 0, 0), -1);
+                    circle(img_out, pnt_2, 3, Scalar(0, 255, 0), -1);
+                    line(img_out, pnt_1, pnt_2, Scalar(255, 0, 0));
                 }
             }
         }
     }
 
-    if (kp_prev.size() > 5)
+    cout << "number of filtered points: " << kp_prev.size() << endl;
+
+    if (kp_prev.size() > 10)
     {
         E = findEssentialMat(kp_prev, kp_current, camera_matrix, 
                                 cv::RANSAC, 0.999, 1.0, mask);
         recoverPose(E, kp_prev, kp_current, camera_matrix, R, t, mask);
+        t= -t;
+
+        // E = findEssentialMat(kp_current, kp_prev, camera_matrix, 
+        //                         cv::RANSAC, 0.999, 1.0, mask);
+        // recoverPose(E, kp_current, kp_prev, camera_matrix, R, t, mask);
 
         RMatToMaxAngles(R);
         TToMaxDistance(t);
 
-        if (max_angle <= MAX_ANGLE && max_translate <= MAX_TRANSLATE)
+        // if (max_angle <= MAX_ANGLE && max_translate <= MAX_TRANSLATE)
+        if (max_angle <= MAX_ANGLE)
         {
             getPointCloud(kp_prev, kp_current, pnts_colors);
             getPosition();
@@ -105,7 +123,7 @@ void MorbCV::orbKeyPointMatch(Mat img1, Mat img2)
 void MorbCV::getPointCloud(vector<Point2f> kp1, vector<Point2f> kp2, vector<Point3f> colors)
 {
     Mat P1, P2, transformed_pnts;
-    Mat pnts3D(1, kp1.size(), CV_64FC1);
+    Mat pnts3D(1, kp1.size(), CV_64FC4);
 
     hconcat(R, t, P2);
     hconcat(Mat::eye(3,3,CV_64FC1), Mat::ones(3,1,CV_64FC1), P1);
@@ -128,11 +146,16 @@ void MorbCV::getPointCloud(vector<Point2f> kp1, vector<Point2f> kp2, vector<Poin
         this_point.x = transformed_pnts.at<double>(0, i);
         this_point.y = transformed_pnts.at<double>(1, i);
         this_point.z = transformed_pnts.at<double>(2, i);
-        // remove too far and too close points
-        if (sqrt(pow(this_point.x, 2) + pow(this_point.z, 2)) <= PCL_DISTANCE_UPPER &&
-            sqrt(pow(this_point.x, 2) + pow(this_point.z, 2)) >= PCL_DISTANCE_LOWER &&
-            this_point.z > 0)
+        // if (sqrt(pow(this_point.x, 2) + pow(this_point.z, 2)) <= PCL_DISTANCE_UPPER &&
+        //     sqrt(pow(this_point.x, 2) + pow(this_point.z, 2)) >= PCL_DISTANCE_LOWER &&
+        //     this_point.z > 0 && this_point.y > -3)
+        // if (this_point.z > 0 && this_point.y > -3)
+        if (1)
         {
+            this_point.x = this_point.x + t_world.at<double>(0);
+            this_point.y = this_point.y + t_world.at<double>(1);
+            this_point.z = this_point.z + t_world.at<double>(2);
+
             pcl_all.push_back(this_point);
             pcl_colors.push_back(colors[i]);
         }
@@ -143,8 +166,10 @@ void MorbCV::getPosition()
 {
     t_world = t_world + MONO_SCALE * (R_world * t);
     R_world = R * R_world;
-    R_all.push_back(R_world);
-    t_all.push_back(t_world);
+    this_R = R_world.clone();
+    this_T = t_world.clone();
+    R_all.push_back(this_R);
+    t_all.push_back(this_T);
 }
 
 void MorbCV::readCameraIntrinsic()
@@ -166,7 +191,7 @@ void MorbCV::readCameraIntrinsic()
     /* assign camear matrix values */
     for (int i=0; i<3; i++){
         for (int j=0; j<3; j++){
-            camera_matrix.at<float>(i,j) = values[i*3 + j];
+            camera_matrix.at<float>(i,j) = values[i*3 + j] * IMAGE_SCALEFACTOR;
         }
     }
 }
