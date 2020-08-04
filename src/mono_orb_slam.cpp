@@ -64,8 +64,11 @@ void MorbCV::orbKeyPointMatch(Mat img1, Mat img2)
     vector<vector<DMatch>> matches;
     matcher.knnMatch(descriptor1, descriptor2, matches, 2);
 
-    // drawMatches(img1, kp1, img2, kp2, matches, img_out);
-    // drawKeypoints(img1, kp1, img_out, Scalar(0, 255, 0));
+    vector<Point2f> p1_vec, p2_vec;
+    vector<double> p_dists, pixel_distances;
+    Point2f p1_tmp, p2_tmp;
+    Point pnt_1, pnt_2;
+    double pixel_dist;
 
     if (matches.size() > 0)
     {
@@ -75,21 +78,41 @@ void MorbCV::orbKeyPointMatch(Mat img1, Mat img2)
             {
                 if (matches[i][0].distance < KNN_MATCHER_DISTANCE_THRESHOLD)
                 {
-                    Point2f p1_tmp = kp1_pnts[matches[i][0].queryIdx];
-                    Point2f p2_tmp = kp2_pnts[matches[i][0].trainIdx];
-                    Point pnt_1 = Point((int)p1_tmp.x, (int)p1_tmp.y);
-                    Point pnt_2 = Point((int)p2_tmp.x, (int)p2_tmp.y);
+                    p1_tmp = kp1_pnts[matches[i][0].queryIdx];
+                    p2_tmp = kp2_pnts[matches[i][0].trainIdx];
 
-                    Point3f color_tmp(1.0, 1.0, 1.0);
+                    double pixel_dist = norm(p1_tmp - p2_tmp);
 
-                    kp_prev.push_back(p1_tmp);
-                    kp_current.push_back(p2_tmp);
-                    pnts_colors.push_back(color_tmp);
-
-                    circle(img_out, pnt_1, 3, Scalar(255, 0, 0), -1);
-                    circle(img_out, pnt_2, 3, Scalar(0, 255, 0), -1);
-                    line(img_out, pnt_1, pnt_2, Scalar(255, 0, 0));
+                    p1_vec.push_back(p1_tmp);
+                    p2_vec.push_back(p2_tmp);
+                    p_dists.push_back(pixel_dist);
+                    pixel_distances.push_back(pixel_dist);
                 }
+            }
+        }
+    }
+
+    if (p_dists.size() > 0)
+    {
+        sort(p_dists.begin(), p_dists.end());
+        int threshold_ind = (int) (PIXEL_DISTANCE_THRESHOLD_ORDER * p_dists.size());
+        pixel_distance_threshold = p_dists[threshold_ind];
+        for (int i=0; i<pixel_distances.size(); i++)
+        {
+            if (pixel_distances[i] < pixel_distance_threshold)
+            {
+                p1_tmp = p1_vec[i];
+                p2_tmp = p2_vec[i];
+                Point3f color_tmp(1.0, 1.0, 1.0);
+                kp_prev.push_back(p1_tmp);
+                kp_current.push_back(p2_tmp);
+                pnts_colors.push_back(color_tmp);
+
+                pnt_1 = Point((int)p1_tmp.x, (int)p1_tmp.y);
+                pnt_2 = Point((int)p2_tmp.x, (int)p2_tmp.y);
+                circle(img_out, pnt_1, 3, Scalar(255, 0, 0), -1);
+                circle(img_out, pnt_2, 3, Scalar(0, 255, 0), -1);
+                line(img_out, pnt_1, pnt_2, Scalar(255, 0, 0));
             }
         }
     }
@@ -102,10 +125,6 @@ void MorbCV::orbKeyPointMatch(Mat img1, Mat img2)
                                 cv::RANSAC, 0.999, 1.0, mask);
         recoverPose(E, kp_prev, kp_current, camera_matrix, R, t, mask);
         t= -t;
-
-        // E = findEssentialMat(kp_current, kp_prev, camera_matrix, 
-        //                         cv::RANSAC, 0.999, 1.0, mask);
-        // recoverPose(E, kp_current, kp_prev, camera_matrix, R, t, mask);
 
         RMatToMaxAngles(R);
         TToMaxDistance(t);
@@ -149,8 +168,8 @@ void MorbCV::getPointCloud(vector<Point2f> kp1, vector<Point2f> kp2, vector<Poin
         // if (sqrt(pow(this_point.x, 2) + pow(this_point.z, 2)) <= PCL_DISTANCE_UPPER &&
         //     sqrt(pow(this_point.x, 2) + pow(this_point.z, 2)) >= PCL_DISTANCE_LOWER &&
         //     this_point.z > 0 && this_point.y > -3)
-        // if (this_point.z > 0 && this_point.y > -3)
-        if (1)
+        if (this_point.y >= -PCL_Y_CONFIMENT && this_point.y <= PCL_Y_CONFIMENT)
+        // if (1)
         {
             this_point.x = this_point.x + t_world.at<double>(0);
             this_point.y = this_point.y + t_world.at<double>(1);
@@ -200,7 +219,7 @@ void MorbCV::RMatToMaxAngles(Mat R)
 {    
     float sy = sqrt(R.at<double>(0,0) * R.at<double>(0,0) +  R.at<double>(1,0) * R.at<double>(1,0) );
 
-    bool singular = sy < 1e-6; // If
+    bool singular = sy < 1e-6; 
 
     double x, y, z;
     if (!singular)

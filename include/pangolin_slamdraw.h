@@ -38,8 +38,7 @@ protected:
     Mat prev_T;
 
     // for drawing the camera
-    // const float w = 0.07;
-    const float w = 0.1;
+    const float w = 0.05;
     const float h = w*0.75;
     const float z = w*0.6;
 

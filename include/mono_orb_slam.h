@@ -18,13 +18,15 @@ namespace morb
 {
 #define IMAGE_SCALEFACTOR 1.0
 #define NUM_CORNERS_TO_DETECT 3000
-#define KNN_MATCHER_DISTANCE_THRESHOLD 100
+#define KNN_MATCHER_DISTANCE_THRESHOLD 500
+#define PIXEL_DISTANCE_THRESHOLD_ORDER 0.85
 
 #define MONO_SCALE 0.1
-#define MAX_ANGLE 3.141593/4
+#define MAX_ANGLE 3.141593/2
 #define MAX_TRANSLATE 10
 #define PCL_DISTANCE_UPPER 10000 
 #define PCL_DISTANCE_LOWER 0
+#define PCL_Y_CONFIMENT 10
 
 class MorbCV
 {
@@ -50,7 +52,7 @@ class MorbCV
         Ptr<ORB> orb_cv = ORB::create();
 
         Mat prev_img, img_out;
-        double max_angle, max_translate;
+        double max_angle, max_translate, pixel_distance_threshold;
         float scale;
 };
 }
