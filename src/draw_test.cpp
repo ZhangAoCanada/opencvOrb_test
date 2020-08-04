@@ -11,12 +11,24 @@ using namespace std;
 using namespace cv;
 
 
-int main()
+int main(int argc, char ** argv)
 {
-    string video_path = "/mnt/f/test_data/kitti_seq0.avi";
-    // string video_path = "/mnt/f/test_data/seq.mov";
+    if (argc != 3)
+    {
+        cerr << "Usage: ./morb path_to_video turn_on_camera_following" << endl;
+    }
 
-    morb::MorbDraw monoDraw(video_path);
+    string video_path = argv[1];
+    stringstream ss(argv[2]);
+    bool follow_camera;
+
+    ss >> boolalpha >> follow_camera;
+    
+    //string video_path = "/Users/aozhang/Downloads/kitti_seq0.avi";
+    // string video_path = "/mnt/f/test_data/seq.mov";
+    //bool follow_camera = false;
+
+    morb::MorbDraw monoDraw(video_path, follow_camera);
 
     monoDraw();
 

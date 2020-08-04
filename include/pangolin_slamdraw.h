@@ -18,7 +18,7 @@ class MorbCV;
 class MorbDraw
 {
 public:
-    MorbDraw(string v_path):video_path(v_path) {};
+    MorbDraw(string v_path, bool follow_c):video_path(v_path), follow_camera(follow_c){};
     void operator()();
     void drawPoints(vector<Point3f> all_points, vector<Point3f> all_colors);
     void drawPath(vector<Mat> R_vec, vector<Mat> T_vec);
@@ -29,6 +29,7 @@ public:
 
 protected:
     string video_path;
+    bool follow_camera;
     pangolin::OpenGlMatrix draw_mat;
     int hm_frames;
     Mat R;

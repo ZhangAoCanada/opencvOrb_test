@@ -39,7 +39,7 @@ namespace morb
 
             if (!current_frame.empty())
             {
-                if (count % 2 == 0)
+                if (count % 1 == 0)
                 {
                     morb_slam(current_frame);
                 }
@@ -48,6 +48,17 @@ namespace morb
 
             // Clear screen and activate view to render into
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+            // make the visualization follow the camera
+            if (follow_camera)
+            {
+                if (morb_slam.pcl_all.size() > 0)
+                {
+                    transferToPangoMat(morb_slam.R_world, morb_slam.t_world);
+                    s_cam.Follow(draw_mat);
+                }
+            }
+
             // glClearColor(1.0, 1.0, 1.0, 1.0);
             d_cam.Activate(s_cam);
 
