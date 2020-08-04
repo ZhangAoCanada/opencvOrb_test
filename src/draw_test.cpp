@@ -13,7 +13,10 @@ using namespace cv;
 
 int main()
 {
-    morb::MorbDraw monoDraw;
+    string video_path = "/mnt/f/test_data/kitti_seq0.avi";
+    // string video_path = "/mnt/f/test_data/seq.mov";
+
+    morb::MorbDraw monoDraw(video_path);
 
     monoDraw();
 

@@ -18,7 +18,7 @@ class MorbCV;
 class MorbDraw
 {
 public:
-    MorbDraw() {};
+    MorbDraw(string v_path):video_path(v_path) {};
     void operator()();
     void drawPoints(vector<Point3f> all_points, vector<Point3f> all_colors);
     void drawPath(vector<Mat> R_vec, vector<Mat> T_vec);
@@ -28,8 +28,7 @@ public:
     void transferToPangoMat(Mat R, Mat T);
 
 protected:
-    string video_path = "/mnt/f/test_data/kitti_seq0.avi";
-    // string video_path = "/mnt/f/test_data/seq.mov";
+    string video_path;
     pangolin::OpenGlMatrix draw_mat;
     int hm_frames;
     Mat R;
