@@ -22,8 +22,15 @@ void MorbCV::operator() (Mat img)
 {
     resize(img, img, Size(), IMAGE_SCALEFACTOR, IMAGE_SCALEFACTOR);
     img_out = img.clone();
+    bool eq = false;
 
-    if (prev_img.empty()){
+    if (!prev_img.empty()){
+        cvtColor(img_out, current_gray, COLOR_BGR2GRAY);
+        cvtColor(prev_img, prev_gray, COLOR_BGR2GRAY);
+        eq = countNonZero(current_gray != prev_gray) == 0;
+    }
+
+    if (prev_img.empty() || eq){
         prev_img = img.clone();
     } else {
         orbKeyPointMatch(prev_img, img);

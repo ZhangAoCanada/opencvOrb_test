@@ -51,7 +51,7 @@ class MorbCV
         BFMatcher matcher;
         Ptr<ORB> orb_cv = ORB::create();
 
-        Mat prev_img, img_out;
+        Mat prev_img, img_out, prev_gray, current_gray;
         double max_angle, max_translate, pixel_distance_threshold;
         float scale;
 };
