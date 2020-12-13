@@ -66,7 +66,7 @@ namespace morb
             draw_mat.SetIdentity();
 
             // Drawing things
-            if (morb_slam.pcl_all.size() > 0)
+            if (morb_slam.R_all.size() > 0)
             {
                 drawPoints(morb_slam.pcl_all, morb_slam.pcl_colors);
                 drawPath(morb_slam.R_all, morb_slam.t_all);

@@ -21,12 +21,12 @@ namespace morb
 #define KNN_MATCHER_DISTANCE_THRESHOLD 500
 #define PIXEL_DISTANCE_THRESHOLD_ORDER 0.85
 
-#define MONO_SCALE 0.1
+#define MONO_SCALE 0.2
 #define MAX_ANGLE 3.141593/2
 #define MAX_TRANSLATE 10
 #define PCL_DISTANCE_UPPER 10000 
 #define PCL_DISTANCE_LOWER 0
-#define PCL_Y_CONFIMENT 10
+#define PCL_Y_CONFIMENT 5
 
 class MorbCV
 {
@@ -43,6 +43,9 @@ class MorbCV
         Mat camera_matrix, E, R, t, R_world, t_world, this_R, this_T;
 
     protected:
+        vector<Point3f> triangulation(Mat P1, Mat P2, vector<Point2f> kp_norm1, 
+                                    vector<Point2f> kp_norm2);
+        vector<Point2f> normalizePnts(vector<Point2f> key_points);
         void readCameraIntrinsic();
         void RMatToMaxAngles(Mat R);
         void TToMaxDistance(Mat T);

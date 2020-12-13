@@ -88,7 +88,7 @@ void MorbCV::orbKeyPointMatch(Mat img1, Mat img2)
                     p1_tmp = kp1_pnts[matches[i][0].queryIdx];
                     p2_tmp = kp2_pnts[matches[i][0].trainIdx];
 
-                    double pixel_dist = norm(p1_tmp - p2_tmp);
+                    pixel_dist = norm(p1_tmp - p2_tmp);
 
                     p1_vec.push_back(p1_tmp);
                     p2_vec.push_back(p2_tmp);
@@ -131,7 +131,9 @@ void MorbCV::orbKeyPointMatch(Mat img1, Mat img2)
         E = findEssentialMat(kp_prev, kp_current, camera_matrix, 
                                 cv::RANSAC, 0.999, 1.0, mask);
         recoverPose(E, kp_prev, kp_current, camera_matrix, R, t, mask);
-        t= -t;
+        //E = findEssentialMat(kp_current, kp_prev, camera_matrix, 
+                                //cv::RANSAC, 0.999, 1.0, mask);
+        //recoverPose(E, kp_current, kp_prev, camera_matrix, R, t, mask);
 
         RMatToMaxAngles(R);
         TToMaxDistance(t);
@@ -140,52 +142,159 @@ void MorbCV::orbKeyPointMatch(Mat img1, Mat img2)
         if (max_angle <= MAX_ANGLE)
         {
             getPointCloud(kp_prev, kp_current, pnts_colors);
+            //t= -t;
             getPosition();
             prev_img = img2.clone();
         }
     } 
 }
 
+vector<Point2f> MorbCV::normalizePnts(vector<Point2f> key_points)
+{
+    vector<Point2f> normalized_pnts;
+    for(int i=0; i<key_points.size(); i++)
+    {
+        Mat pnt_addones = Mat::zeros(3, 1, CV_32F);
+        pnt_addones.at<float>(0) = key_points[i].x;
+        pnt_addones.at<float>(1) = key_points[i].y;
+        pnt_addones.at<float>(2) = (float) 1;
+        Mat normalize_one;
+        normalize_one = camera_matrix.inv() * pnt_addones;
+        Point2f new_point;
+        new_point.x = normalize_one.at<float>(0);
+        new_point.y = normalize_one.at<float>(1);
+        //cout << new_point << endl;
+        normalized_pnts.push_back(new_point);
+    }
+
+    return normalized_pnts;
+}
+
+vector<Point3f> MorbCV::triangulation(Mat P1, Mat P2, vector<Point2f> kp_norm1, 
+                vector<Point2f> kp_norm2)
+{
+    vector<Point3f> pnts3d;
+    Mat w, u, vt;
+    Mat point_original = Mat::zeros(4, 1, CV_64FC1);
+    Mat A = Mat::zeros(4, 4, CV_64FC1);
+    for (int i=0; i<kp_norm1.size(); i++)
+    {
+        A.at<double>(0,0) = kp_norm1[i].x * P1.at<double>(2,0) - P1.at<double>(0,0);
+        A.at<double>(0,1) = kp_norm1[i].x * P1.at<double>(2,1) - P1.at<double>(0,1);
+        A.at<double>(0,2) = kp_norm1[i].x * P1.at<double>(2,2) - P1.at<double>(0,2);
+        A.at<double>(0,3) = kp_norm1[i].x * P1.at<double>(2,3) - P1.at<double>(0,3);
+
+        A.at<double>(1,0) = kp_norm1[i].y * P1.at<double>(2,0) - P1.at<double>(1,0);
+        A.at<double>(1,1) = kp_norm1[i].y * P1.at<double>(2,1) - P1.at<double>(1,1);
+        A.at<double>(1,2) = kp_norm1[i].y * P1.at<double>(2,2) - P1.at<double>(1,2);
+        A.at<double>(1,3) = kp_norm1[i].y * P1.at<double>(2,3) - P1.at<double>(1,3);
+
+        A.at<double>(2,0) = kp_norm2[i].x * P2.at<double>(2,0) - P2.at<double>(0,0);
+        A.at<double>(2,1) = kp_norm2[i].x * P2.at<double>(2,1) - P2.at<double>(0,1);
+        A.at<double>(2,2) = kp_norm2[i].x * P2.at<double>(2,2) - P2.at<double>(0,2);
+        A.at<double>(2,3) = kp_norm2[i].x * P2.at<double>(2,3) - P2.at<double>(0,3);
+
+        A.at<double>(3,0) = kp_norm2[i].y * P2.at<double>(2,0) - P2.at<double>(1,0);
+        A.at<double>(3,1) = kp_norm2[i].y * P2.at<double>(2,1) - P2.at<double>(1,1);
+        A.at<double>(3,2) = kp_norm2[i].y * P2.at<double>(2,2) - P2.at<double>(1,2);
+        A.at<double>(3,3) = kp_norm2[i].y * P2.at<double>(2,3) - P2.at<double>(1,3);
+
+        SVD::compute(A, w, u, vt);
+        point_original.at<double>(0) = vt.at<double>(3, 0);
+        point_original.at<double>(1) = vt.at<double>(3, 1);
+        point_original.at<double>(2) = vt.at<double>(3, 2);
+        point_original.at<double>(3) = vt.at<double>(3, 3);
+        
+        if (point_original.at<double>(3) != 0)
+        {
+            Point3f pnt;
+            pnt.x = point_original.at<double>(0) / point_original.at<double>(3);
+            pnt.y = point_original.at<double>(1) / point_original.at<double>(3);
+            pnt.z = point_original.at<double>(2) / point_original.at<double>(3);
+            pnts3d.push_back(pnt);
+        }
+    }
+
+    return pnts3d;
+}
+
 void MorbCV::getPointCloud(vector<Point2f> kp1, vector<Point2f> kp2, vector<Point3f> colors)
 {
-    Mat P1, P2, transformed_pnts;
-    Mat pnts3D(1, kp1.size(), CV_64FC4);
+    vector<Point2f> kp1_norm, kp2_norm;
+    vector<Point3f> p3d;
+    kp1_norm = normalizePnts(kp1);
+    kp2_norm = normalizePnts(kp2);
 
+    Mat P1, P2;
+    Mat h_lastrow = Mat::zeros(1, 4, CV_64FC1);
+    h_lastrow.at<double>(3) = 1;
     hconcat(R, t, P2);
-    hconcat(Mat::eye(3,3,CV_64FC1), Mat::ones(3,1,CV_64FC1), P1);
-    triangulatePoints(P1, P2, kp1, kp2, pnts3D);
+    vconcat(P2, h_lastrow, P2);
+    hconcat(Mat::eye(3,3,CV_64FC1), Mat::zeros(3,1,CV_64FC1), P1);
+    vconcat(P1, h_lastrow, P1);
 
-    for (int i=0; i<pnts3D.cols; i++)
-    {
-        pnts3D.at<double>(0, i) = pnts3D.at<double>(0, i) / pnts3D.at<double>(3, i);
-        pnts3D.at<double>(1, i) = pnts3D.at<double>(1, i) / pnts3D.at<double>(3, i);
-        pnts3D.at<double>(2, i) = pnts3D.at<double>(2, i) / pnts3D.at<double>(3, i);
-    }
-    // convert [x, y, z, w] to [x, y, z]
-    pnts3D.rowRange(0, 3).convertTo(pnts3D, CV_64FC1);
-    // don't know why, but it works.
-    flip(pnts3D, pnts3D, 0);
-    transformed_pnts = MONO_SCALE * (R_world * pnts3D);
-    for (int i=0; i<transformed_pnts.cols; i++)
+    p3d = triangulation(P1, P2, kp1_norm, kp2_norm);
+    //transformed_pnts = MONO_SCALE * (R_world * pnts3D);
+    for(int i=0; i<p3d.size(); i++)
     {
         Point3f this_point;
-        this_point.x = transformed_pnts.at<double>(0, i);
-        this_point.y = transformed_pnts.at<double>(1, i);
-        this_point.z = transformed_pnts.at<double>(2, i);
-        // if (sqrt(pow(this_point.x, 2) + pow(this_point.z, 2)) <= PCL_DISTANCE_UPPER &&
-        //     sqrt(pow(this_point.x, 2) + pow(this_point.z, 2)) >= PCL_DISTANCE_LOWER &&
-        //     this_point.z > 0 && this_point.y > -3)
-        if (this_point.y >= -PCL_Y_CONFIMENT && this_point.y <= PCL_Y_CONFIMENT)
-        // if (1)
+        Mat this_pnt_mat = Mat::zeros(3,1,CV_64FC1);
+        this_pnt_mat.at<double>(0) = p3d[i].x;
+        this_pnt_mat.at<double>(1) = p3d[i].y;
+        this_pnt_mat.at<double>(2) = p3d[i].z;
+        this_pnt_mat = MONO_SCALE * (R_world * this_pnt_mat);
+
+        if (this_pnt_mat.at<double>(2) > 0)
         {
-            this_point.x = this_point.x + t_world.at<double>(0);
-            this_point.y = this_point.y + t_world.at<double>(1);
-            this_point.z = this_point.z + t_world.at<double>(2);
+            this_point.x = this_pnt_mat.at<double>(0) + t_world.at<double>(0);
+            this_point.y = this_pnt_mat.at<double>(1) + t_world.at<double>(1);
+            this_point.z = this_pnt_mat.at<double>(2) + t_world.at<double>(2);
+            
+            cout << this_point << endl;
 
             pcl_all.push_back(this_point);
             pcl_colors.push_back(colors[i]);
         }
     }
+
+    //Mat P1, P2, transformed_pnts;
+    //Mat pnts3D(1, kp1.size(), CV_64FC4);
+
+    //hconcat(R, t, P2);
+    //hconcat(Mat::eye(3,3,CV_64FC1), Mat::ones(3,1,CV_64FC1), P1);
+    //triangulatePoints(P1, P2, kp1, kp2, pnts3D);
+
+    //for (int i=0; i<pnts3D.cols; i++)
+    //{
+        //pnts3D.at<double>(0, i) = pnts3D.at<double>(0, i) / pnts3D.at<double>(3, i);
+        //pnts3D.at<double>(1, i) = pnts3D.at<double>(1, i) / pnts3D.at<double>(3, i);
+        //pnts3D.at<double>(2, i) = pnts3D.at<double>(2, i) / pnts3D.at<double>(3, i);
+    //}
+    //// convert [x, y, z, w] to [x, y, z]
+    //pnts3D.rowRange(0, 3).convertTo(pnts3D, CV_64FC1);
+    //// don't know why, but it works.
+    //flip(pnts3D, pnts3D, 0);
+    //transformed_pnts = MONO_SCALE * (R_world * pnts3D);
+    //for (int i=0; i<transformed_pnts.cols; i++)
+    //{
+        //Point3f this_point;
+        //this_point.x = transformed_pnts.at<double>(0, i);
+        //this_point.y = transformed_pnts.at<double>(1, i);
+        //this_point.z = transformed_pnts.at<double>(2, i);
+        //// if (sqrt(pow(this_point.x, 2) + pow(this_point.z, 2)) <= PCL_DISTANCE_UPPER &&
+        ////     sqrt(pow(this_point.x, 2) + pow(this_point.z, 2)) >= PCL_DISTANCE_LOWER &&
+        ////     this_point.z > 0 && this_point.y > -3)
+        //if (this_point.y >= -PCL_Y_CONFIMENT && this_point.y <= PCL_Y_CONFIMENT && 
+                //this_point.z > 0)
+        //{
+            //this_point.x = this_point.x + t_world.at<double>(0);
+            //this_point.y = this_point.y + t_world.at<double>(1);
+            //this_point.z = this_point.z + t_world.at<double>(2);
+
+            //pcl_all.push_back(this_point);
+            //pcl_colors.push_back(colors[i]);
+        //}
+    /*}*/
 }
 
 void MorbCV::getPosition()

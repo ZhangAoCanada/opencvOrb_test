@@ -1,1 +1,2 @@
-./build/morb /Users/aozhang/Downloads/kitti_seq0.avi true
+./build.sh
+./build/morb ~/Desktop/seq.mov
